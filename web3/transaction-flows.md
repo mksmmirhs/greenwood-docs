@@ -1,62 +1,114 @@
 # Player transaction flows
 
+## Server-authorized resource settlement
+
+This is the core hybrid flow for gather, craft, hunt rewards, resource shop items, and Bandage use.
+
+1. The authenticated player sends an action with a request ID.
+2. The server checks the bound wallet and validates the action.
+3. The API signs a typed settlement containing the player, action hash, input/output hashes, deterministic nonce, Rules Version 2, world tick, and short deadline.
+4. Next.js asks that wallet to call `GreenwoodSettlement.finalize`.
+5. The contract checks caller, deadline, rules version, unused nonce, resource arrays, hashes, and signer role.
+6. It burns inputs and mints outputs atomically, then emits `SettlementFinalized`.
+
+The normal TTL is 120 seconds, bounded to 30–300 seconds. Medicine uses 300 seconds. A signed response is not an owned resource until finalization confirms.
+
+## Gathering
+
+Each release gather settlement has no input and mints 3 units:
+
+- `GATHER_WOOD` → Timber `0`;
+- `GATHER_STONE` → Stone `1`;
+- `GATHER_FOOD` → Grass/Food `3`;
+- `GATHER_HERBS` → Herbs `6`.
+
+## Crafting
+
+- `CRAFT_BANDAGE`: burn `1×0`, `1×1`, `1×3`; mint `1×9`.
+- `CRAFT_PLANK`: burn `3×0`; mint `1×8`.
+
+The settlement contract has the burner role, so the player does not grant it ERC-1155 operator approval for this path. The signature is the authorization.
+
+## Hunt reward
+
+The server resolves the HMAC-based hunt and commits server health, energy, and XP. If Meat or Hide was won, it signs `HUNT_<TIER>` with resource outputs `4` and `5`. The player then chooses whether to finalize the reward.
+
+## Animal setup
+
+1. Own an eligible Wolf/Sheep and Land.
+2. If the animal is historical and inactive, call `activateLegacyAnimal`.
+3. Call `assignAnimalToLand`.
+4. Feed it before its three-day initial window expires.
+
+V5 animals are registered/activated during the mint transaction. Land has no animal activation.
+
+## Resource feeding
+
+The lifecycle directly holds the ERC-1155 burner role:
+
+- `feedSheep(id, days)` burns `2 × days` Grass/Food ID `3`;
+- `feedWolf(id, days)` burns `3 × days` Meat ID `4`.
+
+No ERC-1155 operator approval is required because `burnFrom` is role-gated and called by the lifecycle. The caller must own the animal. The result cannot exceed 28 days ahead of the current time.
+
+## `$WOOL` auto-feed
+
+1. Check the player's ERC-20 allowance to lifecycle.
+2. If needed, approve lifecycle.
+3. Call animal auto-feed for one to four seven-day periods.
+4. Lifecycle calls `WoolToken.burnFrom` for `10 × periods` `$WOOL`.
+
+The current UI performs the allowance check. Feed-ahead still cannot exceed 28 days.
+
+## Sheep claim
+
+1. Call `requestWoolClaim(sheepId)`.
+2. Wait until the chain is past the recorded entropy block.
+3. Call `resolveWoolClaim(sheepId)`.
+4. Lifecycle mints the checkpointed fixed-rate yield to the Sheep owner or a qualifying fed Wolf owner after a 20% theft roll.
+
+The UI's “up to 5” action loops over Sheep and performs this two-transaction flow for each. It is not a single atomic batch. If the entropy is over 200 blocks old, the helper cancels the expired request before opening another.
+
 ## V5 genesis mint
 
-1. The wallet calls `summon(account)` with exactly `0.0001 ETH`.
-2. The minter chooses among the remaining Land, Wolf, and Sheep quotas.
-3. The appropriate NFT contract mints the token.
-4. Wolf or Sheep is registered and activated in the lifecycle.
-5. 20% of ETH goes to treasury.
-6. 80% of ETH and 10,000 newly minted `$WOOL` go to the protocol pool.
+1. Call `summon(recipient)` or `summonBatch(recipient, 1..20)` with exactly `0.0001 ETH × count`.
+2. V5 selects among the remaining cumulative quotas.
+3. It mints Land, Wolf, or Sheep to the recipient.
+4. A new Wolf/Sheep is registered and activated in lifecycle.
+5. V5 mints `10,000 WOOL × count` to the pool and calls `addProtocolLiquidity` with 80% of ETH.
+6. It sends 20% of ETH to treasury.
 
-Land is eligible but is not an animal and therefore has no lifecycle activation.
-
-## First-time animal setup
-
-1. Connect the wallet that owns the animal and Land.
-2. For a legacy eligible animal, call lifecycle activation. V5 animals are normally already activated.
-3. Select owner-held Land with remaining capacity.
-4. Call `assignAnimalToLand`.
-5. Feed before `fedUntil` expires.
-
-The web **Bulk Setup** action must include both unactivated animals and activated animals whose `assignedLandId` is zero.
-
-## Claiming Sheep `$WOOL`
-
-Requirements:
-
-- the connected wallet owns the Sheep;
-- lifecycle state is activated;
-- the Sheep has a valid assignment to Land owned by the same wallet;
-- the Sheep is not breeding;
-- eligible time exists after `lastWoolClaimAt`.
-
-Flow:
-
-1. The UI calls `requestWoolClaim(sheepId)`.
-2. The transaction records the accrual checkpoint and an entropy block three blocks ahead.
-3. The UI waits until after that block.
-4. The UI calls `resolveWoolClaim(sheepId)`.
-5. The lifecycle computes `elapsed eligible seconds × 3 WOOL/day`.
-6. It mints either to the Sheep owner or, on the 20% theft outcome, to a qualifying fed Wolf owner.
-
-Anyone may resolve a pending claim, but the recorded claimant remains the intended owner. If entropy is more than 200 blocks old, anyone may cancel the expired request and the owner may request again.
-
-If the UI reports zero claimable yield for a new Sheep, inspect activation, `assignedLandId`, Land ownership epoch, feed time, breeding state, and pending request before assuming mint permissions are broken.
-
-## Feeding with resources
-
-1. Approve the lifecycle as an ERC-1155 operator for the resource collection if required.
-2. Call `feedSheep(id, days)` or `feedWolf(id, days)`.
-3. The lifecycle burns 2 Grass/day for Sheep or 3 Meat/day for Wolves.
-4. `fedUntil` extends from the later of now or the existing feed deadline, within the 28-day maximum.
-
-## Auto-feeding with `$WOOL`
-
-1. Approve the lifecycle to spend the required `$WOOL`.
-2. Call the animal-specific auto-feed function with one to four seven-day periods.
-3. The lifecycle burns 10 `$WOOL` per period and extends `fedUntil`.
+Selection uses current block variables and must be replaced for a value-bearing mainnet sale.
 
 ## Marketplace
 
-The seller approves the NFT, creates an expiring supported-collection listing, and escrows the NFT. A buyer submits ETH or approved `$WOOL`. The marketplace settles ownership, payment, and protocol fee atomically.
+### Listing
+
+1. Seller approves the marketplace for the NFT.
+2. Seller creates a supported-collection listing with nonzero price, ETH/`$WOOL` currency, and expiry no more than 30 days away.
+3. The NFT stays in the seller's wallet.
+
+### Purchase
+
+- ETH: buyer pays the exact price; the contract credits fee and proceeds to `pendingETH`, transfers the NFT, and each recipient later withdraws.
+- `$WOOL`: buyer approves the marketplace; fee transfers to treasury and net price transfers to seller during purchase; NFT transfers atomically.
+
+The fee defaults to 3% and can be changed by owner up to 10%. A seller transfer or revoked approval makes the listing stale. The active UI reads only the latest 100 listing IDs.
+
+## Shop
+
+1. Approve `GameShop` for the item's `$WOOL` price.
+2. Call `buyItem(itemId)`; the current contract burns 100% and emits `ItemPurchased`.
+3. Send the confirmed purchase transaction hash to `/economy/shop/claim`.
+4. The API verifies destination, confirmation depth, buyer, and item and records one-time fulfilment.
+5. Health/Energy effects apply to server state. Resource items return a second signed settlement which the wallet finalizes for ERC-1155 outputs.
+
+Resource outputs are +50 Timber, +50 Stone, or +100 Timber/+50 Stone/+1 Building Kit.
+
+## Bandage medicine
+
+Medicine is the reverse bridge: an on-chain Bandage is burned first, then the verified receipt adds 40 server health. The API verifies the exact action and allows each settlement event only once.
+
+## Breeding
+
+The intended flow is documented for contract review, but the current release must not execute it. See [Animals, hunger, and Sheep yield](../gameplay/animal-lifecycle.md).

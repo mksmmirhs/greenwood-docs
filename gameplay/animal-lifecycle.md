@@ -1,52 +1,75 @@
-# Animals, hunger, and breeding
+# Animals, hunger, and Sheep yield
 
-`GreenwoodAnimalLifecycle` is the canonical state machine for Wolf and Sheep care. The API no longer simulates feeding, fleece production, or breeding; its old economy endpoints reject those actions and direct the client to the chain.
+`GreenwoodAnimalLifecycle` is the canonical contract for eligible Wolf/Sheep activation, Land assignment, feeding, Sheep `$WOOL` production, theft selection, and intended Sheep breeding. The retired server `feed`, `produce`, and `breed` endpoints reject requests.
 
-## Eligibility, activation, and Land
+## Eligibility
 
-An NFT must come from a frozen eligibility source or be a bred Sheep registered by the lifecycle. Activation starts a three-day initial feed window. A paid V5 animal is activated during mint; legacy eligible animals require `activateLegacyAnimal`.
+The lifecycle checks token IDs against three frozen sources: historical paid V3, historical paid V4, and V5. Bred Sheep are registered directly by the lifecycle.
 
-Activation does **not** assign Land. The owner must call `assignAnimalToLand`. This is why a newly minted, activated Sheep may display zero claimable `$WOOL`: production requires a valid Land assignment.
+V5 contains a public `testnetMakeEligible` helper. This is a testnet vulnerability, not a player feature, because any caller can mark arbitrary existing IDs in the source as eligible.
 
-Assignments are protected by a Land ownership epoch. If Land ownership changes, old animal assignments become invalid instead of silently benefiting the new owner.
+## Activation and Land
+
+- A V5 Wolf or Sheep is activated during minting and receives a three-day feed window.
+- An eligible historical animal must be activated once by its current owner.
+- Activation does not assign Land.
+- The owner calls `assignAnimalToLand` and must own both the animal and eligible Land.
+- V5 Land has Grassland biome, 10,000 quality basis points, and capacity 20.
+- Land ownership epochs invalidate old assignments after transfer and prevent stale occupancy from permanently consuming capacity.
+
+Land quality, Sheep quality, and the NFT's stored wool-production trait do **not** modify the current lifecycle yield. Rules V2 pays the same fixed rate to every qualifying Sheep.
 
 ## Hunger
 
-Rules V2 use economic suspension rather than NFT death:
+The current strategy suspends production instead of destroying NFTs.
 
-- Sheep consume 2 Grass per fed day.
-- Wolves consume 3 Meat per fed day.
-- Feeding can extend at most 28 days ahead of current time.
-- Auto-feed burns 10 `$WOOL` for each seven-day period.
-- A hungry Sheep stops accruing `$WOOL` and cannot breed.
-- A hungry Wolf cannot receive stolen `$WOOL` or lambs.
-- `finalizeStarvation` always reverts; hunger does not destroy an NFT.
+- Sheep feed costs 2 Grass per day.
+- Wolf feed costs 3 Meat per day.
+- Feed time can extend no farther than 28 days from the current block time.
+- Auto-feed costs 10 `$WOOL` burned for each seven-day period.
+- Hungry Sheep stop accruing `$WOOL` and cannot breed.
+- Hungry Wolves cannot receive stolen `$WOOL` or lambs.
+- `finalizeStarvation` always reverts with `HungerDoesNotCauseDeath`.
 
-Health and stamina are separate server-side systems. Hunger does not replace combat health, and server health does not mint or burn an NFT.
+The animal `deathFinalizedAt` field and starvation event remain in the storage/interface, but no current Rules V2 path sets starvation death. The server's player health is unrelated to NFT life.
 
-## Sheep production
+## Sheep `$WOOL` production
 
-A Sheep accrues 3 `$WOOL` per day only while it is activated, assigned to valid owner-held Land, fed, and not breeding. Claims use two transactions:
+A Sheep accrues 3 `$WOOL` per eligible day while all of these are true:
 
-1. `requestWoolClaim` checkpoints the eligible accrual and selects a future entropy block.
-2. After that block, `resolveWoolClaim` mints the exact checkpointed amount.
+- it is lifecycle-eligible and activated;
+- the connected wallet owns it;
+- it has a valid assignment to Land held by the same wallet;
+- its feed window has not ended;
+- it is not breeding.
 
-There is a 20% chance that the complete claim is sent to a randomly selected eligible, living, fed Wolf owner. If no qualifying Wolf is found, the Sheep owner receives it.
+Accrual stops at `fedUntil`. A hungry Sheep can still claim the yield accumulated before it became hungry.
 
-## Intended breeding rules
+### Claim flow
 
-The current source expresses these rules:
+1. `requestWoolClaim` stores the claimant, accrual end, and entropy block three blocks ahead.
+2. After that block, `resolveWoolClaim` calculates elapsed eligible seconds at 3 `$WOOL` per day.
+3. The lifecycle increments the 900-million gameplay issuance counter.
+4. It mints the complete amount to the owner or, on a 20% theft roll, to a different activated, living, fed Wolf owner.
 
-- both Sheep must have the same owner and valid Land assignment;
-- both must be fed, not breeding, within the breed-count limit, and off cooldown;
-- Land must have capacity for another animal;
-- 10 `$WOOL` goes to the team treasury;
-- the player may burn 100 `$WOOL` per day to reduce seven days down to a one-day minimum;
-- parent production pauses during breeding;
-- a resolved lamb has a 10% chance of going to a qualifying Wolf owner;
-- at most 10,000 secondary Sheep may be bred;
-- each parent has a seven-day cooldown following the breeding ready time.
+Theft redistributes the complete claim; it does not burn supply. The selection probes at most 32 activated Wolf IDs. If it finds no qualifying different owner, the Sheep owner receives the claim.
 
-## Deployed breeding status: blocked
+Entropy expires 200 blocks after the selected block. Anyone can cancel an expired Sheep claim, after which the owner can request again. The web helper performs this recovery and handles a previous owner's pending request after transfer.
 
-The timing and entropy model cannot currently resolve after a real one-to-seven-day wait. Do not initiate breeding with valuable test state until a corrected lifecycle is deployed; expired cancellation can leave parent Sheep marked as breeding.
+## Sheep breeding
+
+Sheep breeding is live on the V2 lifecycle contract and accessible through the in-game **Breeding House** UI:
+
+- **Requirements:** Same owner, two distinct fed Sheep assigned to the same Land parcel with available capacity.
+- **Cooldown & Limits:** Neither parent may currently be breeding, on cooldown (7 days after previous breeding), or have reached the 20-breed maximum.
+- **Costs:** 
+  - 10 `$WOOL` treasury fee transferred directly to protocol treasury.
+  - Optional speedup: burn 100 `$WOOL` per day reduced (up to 6 days reduced, for a 1-day minimum duration).
+- **Duration:** 7-day base duration, reduced down to 1–6 days if speedup `$WOOL` is burned.
+- **Wool Production:** Paused for both parent Sheep during the breeding period.
+- **Offspring & Theft:** When resolved, a new Sheep NFT is minted and activated. 10% chance of lamb theft to an activated, fed Wolf belonging to a different owner.
+- **Secondary Cap:** Maximum 10,000 secondary Sheep can be bred globally.
+
+## Wolves today
+
+Wolves can be activated, assigned, fed, and selected as recipients of stolen `$WOOL` (20% chance) or stolen bred lambs (10% chance). Hungry Wolves are ineligible to steal. There is no current Wolf breeding contract path, Wolf yield, or direct integration between an owned Wolf NFT and the server hunt outcome.

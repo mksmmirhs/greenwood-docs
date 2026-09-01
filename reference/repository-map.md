@@ -1,35 +1,54 @@
 # Repository map
 
-## Applications
+## Active applications
 
-- `apps/web` — Next.js 15 shell, Privy UI, Unity host, marketplace, mint, swap, and lifecycle interfaces.
-- `apps/unity` — Unity 6 voxel renderer, movement, animation, camera, combat presentation, and JavaScript bridge.
-- `apps/api` — NestJS auth, wallet binding, world gateway, chain roster, economy boundary, vitals, social, and admin APIs.
-- `apps/indexer` — confirmed Robinhood event ingestion, cursors, and reorg rewind.
-- `apps/job-worker` — territory upkeep and season rollover tasks.
+- `apps/web` — Next.js 15. `/world` hosts Unity, Privy, chain reads/writes, lifecycle, mint/pool, marketplace, shop, and HUD actions. `/` is a showcase/simulation dashboard.
+- `apps/unity` — Unity 6 runtime-built voxel farm, ranger animation, camera, network bridge, node interaction, and presentation helpers.
+- `apps/api` — NestJS authentication, wallet binding, world loop, signed settlement issuance, roster reads, vitals/shop receipt verification, social, and admin APIs.
+- `apps/indexer` — confirmed-log journal with persisted cursor and reorg rewind.
+- `apps/job-worker` — territory expiry and season rollover.
+
+## Alternative/source-only client code
+
+- `apps/web/src/components/world/world-game.tsx` — older alternative client, not routed at `/world`.
+- `apps/web/src/components/world/community-panel.tsx` — functional social HTTP UI mounted only by that inactive client.
+
+This distinction explains why finding a component in source does not mean it appears in the current game.
 
 ## Contracts
 
-- `contracts/src/tokens` — `$WOOL`, Wolf, Sheep, Land, and resource tokens.
-- `contracts/src/game` — animal lifecycle and signed settlement.
-- `contracts/src/market` — V5 genesis mint, liquidity pool, marketplace, shop, and legacy summoner.
+- `contracts/src/tokens` — `$WOOL`, Wolf, Sheep, Land, and ERC-1155 resources.
+- `contracts/src/game` — Rules V2 animal lifecycle and signed settlement.
+- `contracts/src/market` — V5 minter, legacy summoner, pool, marketplace, and shop.
 - `contracts/src/governance` — treasury.
-- `contracts/test` — unit, fuzz, integration, and invariant tests.
-- `contracts/script` — deployment and administration scripts.
-- `contracts/deployments` — machine-readable chain manifests.
+- `contracts/script` — deployments and migrations.
+- `contracts/deployments` — address manifests.
+- `contracts/test` — 51 current Foundry tests across unit, fuzz, and invariant suites.
 
 ## Shared packages
 
-- `packages/contracts-abi` — generated ABIs and addresses.
-- `packages/game-core` — deterministic server rules.
-- `packages/protocol` — network schemas.
-- `packages/config` — common configuration.
-- `packages/types` — shared TypeScript data types.
+- `packages/contracts-abi` — generated ABIs/address defaults.
+- `packages/protocol` — Zod schemas and shared wire types.
+- `packages/game-core` — deterministic rules library; not the release feature allowlist.
+- `packages/config` — network, world, and strategy constants.
+- `packages/types` — shared types.
 
-## Content and operations
+## Persistence
 
-- `art`, `metadata`, and `scripts` — deterministic NFT generation and validation.
-- `simulation` — economic scenarios and invariant tests.
+- `apps/api/migrations` — players, chain events, vitals, social/seasons, playable assets, operations, combat/territory, wallet integrity, and consumable fulfilment tables.
 - `infra/compose` — local PostgreSQL/PostGIS and Redis.
-- `docs` — engineering plans, ADRs, threat model, and runbooks.
-- `gitbook` — player/developer documentation backed by the current source.
+
+## NFT media
+
+- `metadata` — source JSON for full collection namespaces.
+- `art/source` — master art inputs.
+- `art/generated` — 14,500 generated images and metadata.
+- `art/manifests` — collection provenance output.
+- `scripts/generate_nft_collection.py` — deterministic composer.
+- `scripts/validate_generated_collection.py` — supply/hash/path/coordinate/provenance validator.
+
+## Documentation and analysis
+
+- `gitbook` — maintained product/developer truth from current code.
+- `docs` — plans, ADRs, risk registers, threat model, and runbooks; some are historical.
+- `simulation` — supply-conservation and scenario analysis, not a price or adoption proof.

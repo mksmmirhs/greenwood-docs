@@ -1,43 +1,53 @@
 # System overview
 
 ```text
-Privy + Next.js shell
-        |
-        +-- viem wallet transactions ---------------- Robinhood Testnet
-        |
-        +-- Unity WebGL via WolfBridge.jslib
-                    |
-              authenticated WebSocket
-                    |
-                 NestJS API
-                    |
-       +------------+-------------+
-       |            |             |
-  PostgreSQL      Redis       job worker
-       ^                            |
-       +--------- chain indexer ----+
+                    Robinhood Testnet
+                 /        |          \
+        direct reads   wallet txs   confirmed logs
+              /            |              \
+       Next.js HUD ---- settlement ---- event indexer
+          |   |          finalization          |
+       Privy  |                               PostgreSQL
+          |   |
+      Unity WebGL
+          |
+  authenticated Socket.IO
+          |
+       NestJS API ---- PostgreSQL
+          |  \
+          |   Redis
+          |
+ signed resource entitlement
 ```
 
-## Browser application
+## Active browser route
 
-The Next.js app owns authentication, wallet selection, chain configuration, marketplace, minting, swaps, animal lifecycle HUD, and the container for Unity. Contract calls use ABIs and deployment defaults from the shared contracts package.
+`apps/web/src/app/world/page.tsx` renders the authentication button and `UnityWorld`. `UnityWorld` loads the compiled WebGL manifest/build, opens the Socket.IO connection, forwards snapshots into Unity, receives Unity input, and serializes resource-settlement wallet prompts.
 
-## Unity presentation
+`HomesteadHud` reads chain balances and assets and exposes minting, lifecycle, marketplace, pool, shop, medicine, gather, craft, and hunt actions.
 
-Unity owns voxel world rendering, ranger animation, camera, local input, visible players, resource nodes, homestead state, biome presentation, equipment, and combat effects. It communicates with JavaScript through `WolfBridge.jslib` and `NetworkBridge.cs`.
+The older `components/world/world-game.tsx` Phaser-style client and its `CommunityPanel` are not mounted by `/world`.
 
-## API and world loop
+## API
 
-NestJS provides HTTP identity/economy/social endpoints and a Socket.IO world gateway. A five-Hz loop validates and broadcasts world snapshots. PostgreSQL stores durable player, inventory, social, and projection state; Redis supports ephemeral shared state.
+The API provides:
 
-## Chain integration
-
-The web submits player transactions. The API verifies settlement receipts and synchronizes the bound wallet's roster. The indexer consumes contract logs after confirmation depth and handles reorg rewind. Chain data remains authoritative even when a projection is temporarily stale.
+- Privy token verification and account-ban checks;
+- wallet challenge binding;
+- roster synchronization from chain;
+- the authoritative movement/world loop;
+- signed ERC-1155 settlements;
+- shop and medicine receipt verification;
+- social and administrative HTTP endpoints.
 
 ## Shared packages
 
-- `contracts-abi` — ABI and Robinhood deployment addresses.
-- `protocol` — versioned request and event schemas.
-- `game-core` — deterministic gameplay rules and tests.
-- `config` — shared network/economy configuration.
-- `types` — common TypeScript types.
+- `@wolf-game/contracts-abi` — ABIs and default Robinhood addresses.
+- `@wolf-game/protocol` — schemas for HTTP/socket payloads and signed settlement serialization.
+- `@wolf-game/game-core` — deterministic movement, hunt, combat, recipe, building, and profession rules. Not every library rule is enabled in the release server.
+- `@wolf-game/config` — chain/world/economic constants.
+- `@wolf-game/types` — shared domain types.
+
+## Separate processes
+
+`pnpm dev` starts only web and API. The confirmed-log indexer and scheduled job worker are separate processes. A complete shared testnet environment also needs PostgreSQL, Redis, migrations, a configured settlement signer with the correct on-chain role, and the compiled Unity WebGL files.

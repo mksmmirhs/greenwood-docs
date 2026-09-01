@@ -1,35 +1,59 @@
 # Authority model
 
-## On-chain authority
+Greenwood is not “everything on-chain.” It places durable ownership and economic state on Robinhood Testnet while keeping real-time play on the server.
+
+## Contract authority
 
 Robinhood Testnet is canonical for:
 
-- Wolf, Sheep, and Land ownership;
-- NFT mint caps, traits, lineage, and Land coordinates;
-- `$WOOL` balances, supply cap, minting, transfers, approvals, and burns;
-- ERC-1155 durable resource balances;
-- animal lifecycle activation, feeding horizon, Land assignment, production checkpoints, and breeding state;
-- genesis sale revenue and liquidity creation;
-- escrow marketplace settlement;
-- shop purchases, treasury custody, and signed resource settlement.
+- Wolf, Sheep, and Land token ownership;
+- collection-level token IDs, traits, lineage, Land coordinates, and caps;
+- the V3–V5 paid-mint eligibility records used by Rules V2;
+- `$WOOL` balances, approvals, burns, supply, and issuance budgets;
+- ERC-1155 resource balances and per-resource caps;
+- animal activation, feed horizon, Land assignment, breeding flags, and Sheep claim checkpoints;
+- genesis ETH routing and protocol-liquidity issuance;
+- custom pool reserves, bins, quotes, and swaps;
+- marketplace listings, purchases, fees, and ETH withdrawal credits;
+- shop payments and burn amounts;
+- settlement nonces and exact resource inputs/outputs finalized from a valid signer.
 
 ## Server authority
 
-The NestJS service is canonical for:
+NestJS is canonical for:
 
-- position, movement validation, presence, and world ticks;
-- gathering nodes and cooldowns;
-- inventory used by server gameplay;
-- crafting, health, stamina, medicine, hunts, and combat;
-- guilds, chat, territories, leaderboards, moderation, and season jobs;
-- deciding whether an off-chain action earned a signed settlement entitlement.
+- authenticated world sessions and current positions;
+- movement sequence acceptance, node range, cooldowns, and respawns;
+- server health, energy, XP, and regeneration;
+- hunt randomness/outcomes and whether a resource settlement may be issued;
+- shop and medicine fulfilment after receipt verification;
+- guilds, membership, chat, territories, leaderboard scores, reports, moderation, and seasons;
+- settlement signatures for allowed release actions.
 
-## Projection-only data
+The settlement signer is a centralized economic authority. Resource caps and player confirmation constrain it, but a compromised signer can authorize arbitrary allowed ERC-1155 IDs and amounts up to those caps. Key isolation, rate limits, monitoring, rotation, and reconciliation are mandatory.
 
-The database contains wallet-bound projections of on-chain NFTs for game UI and world access. It must never create ownership. Synchronization re-reads the configured contracts and deactivates rows no longer owned by the bound wallet.
+## Client responsibility
 
-The indexer is also a projection. It waits for confirmation depth and rewinds on reorg. A rebuild from chain events must be safe.
+Next.js and Unity are untrusted presentation/input clients. They may:
 
-## Client trust
+- request an action;
+- display predicted or fetched state;
+- build a contract transaction;
+- ask the wallet to sign or submit;
+- wait for a receipt.
 
-The Next.js/Unity client is untrusted for reward calculation. It may predict movement and format transaction calls, but both the server and contracts validate state transitions independently.
+They may not decide a reward, claim ownership, or treat a submitted transaction as successful before confirmation.
+
+## Projection data
+
+The chain roster service reads ERC-721Enumerable ownership and lifecycle eligibility directly from RPC, then stores wallet-bound rows for the HUD. Those rows are projections; a later synchronization deactivates assets no longer owned.
+
+The separate indexer journals confirmed logs into `chain_events`, persists a cursor, and rewinds on a detected reorg. It currently does not build complete ownership, balance, or lifecycle materialized views. Contract reads remain necessary.
+
+## Important split-state effects
+
+- A hunt may spend server energy even if the player declines the on-chain reward transaction.
+- A shop vital item burns `$WOOL` on-chain, but the refill is server-side and requires API fulfilment.
+- A resource crate purchase needs a second signed-settlement transaction after the purchase transaction.
+- An NFT transfer changes chain ownership immediately; the HUD database may remain stale until roster synchronization.
+- Hunger can stop chain production while server player health remains 100, or vice versa.

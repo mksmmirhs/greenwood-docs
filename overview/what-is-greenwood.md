@@ -1,29 +1,28 @@
 # What is Greenwood?
 
-Greenwood combines a fast server-authoritative multiplayer loop with durable EVM ownership.
+Greenwood is a persistent-homestead and expedition game built across three authorities.
 
-The Unity WebGL client renders a voxel homestead and world. A Next.js shell handles authentication, wallet transactions, marketplace and animal-management interfaces. A NestJS server validates movement and moment-to-moment game actions. Solidity contracts own scarce assets and economic settlement.
+- **Unity WebGL** renders the voxel farm, ranger, other connected players, and resource nodes.
+- **The game server** owns movement validation, positions, health, energy, hunt outcomes, social data, and permission to issue durable resource settlements.
+- **Robinhood Testnet** owns NFTs, `$WOOL`, ERC-1155 resources, animal feed clocks, Land assignments, Sheep production, mint revenue, swaps, shop payments, and NFT sales.
+
+The Next.js `/world` page connects these systems. It hosts Unity, handles Privy and wallet transactions, displays the homestead HUD, and submits server-signed settlements to the chain.
 
 ## Player fantasy
 
-You are a ranger building a homestead in a shared wilderness:
+The player is a ranger maintaining a farm and venturing into Greenwood:
 
-1. Enter the world and explore with other players.
-2. Gather Timber, Stone, Grass, Meat, Hide, Herbs, and other resources.
-3. Craft tools and medicine, hunt creatures, and maintain health and stamina.
-4. Acquire Land, Sheep, and Wolves as NFTs.
-5. Assign animals to Land and keep them fed.
-6. Produce and claim `$WOOL`, breed Sheep, trade assets, and participate in the economy.
-7. Join guild and territory competition as those systems mature.
+1. walk through a shared voxel homestead;
+2. gather Grass, Timber, Stone, and Herbs;
+3. hunt to earn Meat and Hide while spending server energy and risking server health;
+4. craft Planks or Bandages from on-chain resource inputs;
+5. own Land, Sheep, and Wolves;
+6. feed animals and assign them to Land;
+7. claim Sheep-produced `$WOOL`;
+8. spend `$WOOL`, swap against protocol liquidity, and trade NFTs.
 
-## Design boundary
+## What the current build is not
 
-Greenwood is deliberately hybrid. Putting every movement update or combat round on-chain would make the game slow and expensive. Leaving ownership and token issuance on a game server would make those assets unverifiable.
+It is not a fully on-chain game. Sending every movement tick to the EVM would make the world unusable. It is also not yet a full MMO release: the active route has a single small world, manual wallet confirmation for each durable settlement, no reachable round-combat entry, no social panel, disabled breeding, and no building transaction flow.
 
-The system therefore uses:
-
-- the **chain** for ownership, scarcity, token flows, lifecycle rules, and value settlement;
-- the **server** for real-time world actions, anti-cheat validation, health, stamina, combat, social state, and settlement authorization;
-- the **client** for presentation, input, prediction, transaction prompts, and synchronized UI.
-
-See [Authority model](../web3/authority-model.md) for the exact split.
+The large NFT and simulation dashboard at `/` is a showcase/development surface. Its sample names, rarity statistics, scenario claims, and cards are not contract truth. The playable client is `/world`.

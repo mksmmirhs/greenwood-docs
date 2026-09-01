@@ -1,37 +1,64 @@
 # Configuration
 
-Copy each application's `.env.example` to its local environment file and supply secrets outside version control.
+Use the application `.env.example` files as the schema. Never commit populated secrets.
 
 ## Web
 
-Browser-safe values use `NEXT_PUBLIC_`:
+Public browser values include:
 
 - `NEXT_PUBLIC_PRIVY_APP_ID`;
-- NFT, `$WOOL`, marketplace, shop, settlement, lifecycle, genesis, resource, treasury, and pool addresses.
+- game server/API URLs;
+- `$WOOL`, Wolf, Sheep, Land, marketplace, treasury, shop, V5 minter, pool, resources, settlement, and lifecycle addresses.
 
-`PRIVY_APP_SECRET` and private keys must never use the public prefix.
+Only public identifiers and contract addresses may use `NEXT_PUBLIC_`. `PRIVY_APP_SECRET` and private keys must never be exposed in the browser bundle.
+
+The web falls back to addresses from `@wolf-game/contracts-abi` when public overrides are absent. Verify the built bundle's actual addresses after every deployment.
 
 ## API
 
-Configure:
+Required for the full shared flow:
 
-- `PORT` and `WEB_ORIGIN`;
-- `DATABASE_URL` and `REDIS_URL`;
-- `PRIVY_APP_ID` and `PRIVY_PUBLIC_KEY`;
-- `SETTLEMENT_SIGNER_PRIVATE_KEY` for a dedicated testnet signer;
-- `WORLD_RNG_SECRET` with at least 32 random bytes;
-- optional comma-separated `ADMIN_USER_IDS`.
+- `PORT`, `WEB_ORIGIN`;
+- `DATABASE_URL`, `REDIS_URL`;
+- `PRIVY_APP_ID`, `PRIVY_PUBLIC_KEY`;
+- `GREENWOOD_RESOURCES_ADDRESS`, `GREENWOOD_SETTLEMENT_ADDRESS`;
+- `SETTLEMENT_SIGNER_PRIVATE_KEY`;
+- `WORLD_RNG_SECRET` with at least 32 random bytes in shared environments.
 
-`AUTH_BYPASS` is only for local automated clients and must remain false in shared environments.
+Optional/controlled:
+
+- `ROBINHOOD_RPC_URL`;
+- `SHOP_REQUIRED_CONFIRMATIONS`;
+- comma-separated `ADMIN_USER_IDS`;
+- `AUTH_BYPASS`, local automation only.
+
+The API does not need the Privy app secret to verify access tokens because it uses the public verification key. If another server-side Privy operation needs the app secret, keep it in that server environment only.
 
 ## Indexer
 
-Configure the Robinhood RPC, confirmation count, poll interval, chunk size, reorg rewind, start block, database URL, and every watched contract address.
+Configure:
 
-When a contract is redeployed, the indexer address and start block must change with it. Leaving an older lifecycle or minter address in the indexer creates a split-brain UI even when the web points at the new contract.
+- `DATABASE_URL`, `ROBINHOOD_RPC_URL`;
+- confirmation, poll, chunk, rewind, and start-block values;
+- all 11 watched contract addresses;
+- `RUN_ONCE` for bounded synchronization.
 
-## Source of truth
+The default start block is just before the first configured deployment. A lifecycle/minter redeploy requires a reviewed start point and watched-address update. The indexer does not discover deployments automatically.
 
-Use `contracts/deployments/46630.json` as the deployment manifest and generate shared exports from it. Do not manually maintain competing address lists in documentation.
+## Job worker
 
-The current lifecycle Solidity constants are runtime truth for animal economics. Shared TypeScript/simulation configuration must be kept synchronized and must not override contract behavior.
+The worker needs `DATABASE_URL`, poll interval, and optional `RUN_ONCE`. Run only one effective tick at a time; the advisory transaction lock coordinates concurrent instances.
+
+## Unity
+
+Unity runtime endpoints are supplied through the Next.js bridge; no wallet private key belongs in Unity. Generated WebGL files live under `apps/web/public/unity` and should be rebuilt from source rather than hand-edited.
+
+## Contract configuration
+
+Use `contracts/deployments/46630.json` as the repository manifest. Treat on-chain immutable dependencies and role reads as final verification. A JSON file can be stale or manually edited.
+
+Animal economics are lifecycle Solidity constants. Release gather/craft/hunt allowlists are in `apps/api/src/world/world-state.service.ts`. Do not let the TypeScript economics object, generic recipe catalog, simulation, UI strings, or GitBook silently override those runtime authorities.
+
+## Secret incident rule
+
+If a Privy secret, settlement key, deployer key, or treasury key appears in chat, logs, screenshots, shell history, or source control, rotate it and invalidate the old credential. Redacting documentation afterward does not make the leaked value safe.
