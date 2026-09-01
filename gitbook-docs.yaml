@@ -1,0 +1,10 @@
+site:
+  title: Greenwood MMO
+  structure:
+    - type: space
+      key: space-greenwood-docs
+      title: Greenwood Documentation
+      path: docs
+      default: true
+      content:
+        directory: ./
